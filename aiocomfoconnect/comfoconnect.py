@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Any, Callable, Dict, List, Literal, Optional
 
-from aiocomfoconnect import Bridge
+from aiocomfoconnect import DEFAULT_NAME, DEFAULT_PIN, Bridge
 from aiocomfoconnect.const import (
     ERRORS,
     ERRORS_140,
@@ -218,6 +218,29 @@ class ComfoConnect(Bridge):
         await super().disconnect()
         self._reconnect_task = None
         self._session_ready = None
+
+    async def register(self, uuid: str, name: str = DEFAULT_NAME, pin: int = DEFAULT_PIN) -> bool:
+        """Register this application with the bridge.
+
+        Uses a one-shot, low-level connection instead of the supervised reconnect
+        loop started by connect(): that loop tears the socket down on
+        ComfoConnectNotAllowed, which would close the connection before the app
+        could be registered. Safe to call before connect().
+
+        Returns True if the app was already registered, False if it was newly
+        registered. Raises ComfoConnectNotAllowed if the PIN is wrong.
+        """
+        await Bridge.connect(self, uuid)
+        try:
+            try:
+                await self.cmd_start_session(True)
+                return True
+            except ComfoConnectNotAllowed:
+                await self.cmd_register_app(uuid, name, pin)
+                await self.cmd_start_session(True)
+                return False
+        finally:
+            await Bridge.disconnect(self)
 
     async def register_sensor(self, sensor: Sensor):
         """Register a sensor on the bridge."""

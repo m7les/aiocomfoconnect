@@ -83,29 +83,19 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
     if not bridges:
         raise BridgeNotFoundException("No bridge found")
 
-    # Connect to the bridge
     comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
 
+    # Register the app (one-shot, low-level connection).
     try:
-        # Login with the bridge
-        await comfoconnect.connect(uuid)
-        print(f"UUID {uuid} is already registered.")
-
+        already = await comfoconnect.register(uuid, name, pin)
     except ComfoConnectNotAllowed:
-        # We probably are not registered yet...
-        try:
-            await comfoconnect.cmd_register_app(uuid, name, pin)
-        except ComfoConnectNotAllowed:
-            await comfoconnect.disconnect()
-            print("Registration failed. Please check the PIN.")
-            sys.exit(1)
+        print("Registration failed. Please check the PIN.")
+        sys.exit(1)
 
-        print(f"UUID {uuid} is now registered.")
+    print(f"UUID {uuid} is {'already' if already else 'now'} registered.")
 
-        # Connect to the bridge
-        await comfoconnect.cmd_start_session(True)
-
-    # ListRegisteredApps
+    # Now that we are registered, use the normal supervised connection to list apps.
+    await comfoconnect.connect(uuid)
     print()
     print("Registered applications:")
     reply = await comfoconnect.cmd_list_registered_apps()
