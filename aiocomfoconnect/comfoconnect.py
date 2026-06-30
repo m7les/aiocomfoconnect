@@ -1,4 +1,4 @@
-""" ComfoConnect Bridge API abstraction """
+"""ComfoConnect Bridge API abstraction"""
 
 from __future__ import annotations
 
@@ -32,11 +32,34 @@ from aiocomfoconnect.const import (
 from aiocomfoconnect.exceptions import (
     AioComfoConnectNotConnected,
     AioComfoConnectTimeout,
+    ComfoConnectError,
     ComfoConnectNotAllowed,
 )
-from aiocomfoconnect.properties import Property
+from aiocomfoconnect.properties import (
+    PROPERTY_ALTITUDE,
+    PROPERTY_ARTICLE,
+    PROPERTY_COUNTRY,
+    PROPERTY_FIRMWARE_VERSION,
+    PROPERTY_MODEL,
+    PROPERTY_NAME,
+    PROPERTY_ORIENTATION,
+    PROPERTY_RMOT_COOLING_PERIOD,
+    PROPERTY_RMOT_HEATING_PERIOD,
+    PROPERTY_SERIAL_NUMBER,
+    PROPERTY_TARGET_TEMPERATURE_COOLING,
+    PROPERTY_TARGET_TEMPERATURE_HEATING,
+    PROPERTY_TARGET_TEMPERATURE_NORMAL,
+    PROPERTY_UNBALANCE,
+    PROPERTY_VENTILATION_CONTROL_MODE,
+    Property,
+)
 from aiocomfoconnect.sensors import Sensor
-from aiocomfoconnect.util import bytearray_to_bits, bytestring, encode_pdo_value
+from aiocomfoconnect.util import (
+    bytearray_to_bits,
+    bytestring,
+    encode_pdo_value,
+    version_decode,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -588,6 +611,100 @@ class ComfoConnect(Bridge):
             await self.cmd_rmi_request(bytes([0x03, UNIT_TEMPHUMCONTROL, SUBUNIT_01, 0x07, 0x00]))
         else:
             raise ValueError(f"Invalid mode: {mode}")
+
+    # --- Node information (read-only diagnostics) ---
+
+    async def get_serial_number(self, node_id=1) -> str:
+        """Get the serial number of the node."""
+        return await self.get_property(PROPERTY_SERIAL_NUMBER, node_id=node_id)
+
+    async def get_firmware_version(self, node_id=1) -> str:
+        """Get the (decoded) firmware version of the node."""
+        return version_decode(await self.get_property(PROPERTY_FIRMWARE_VERSION, node_id=node_id))
+
+    async def get_model(self, node_id=1) -> str:
+        """Get the model name of the node."""
+        return await self.get_property(PROPERTY_MODEL, node_id=node_id)
+
+    async def get_article_number(self, node_id=1) -> str:
+        """Get the article number of the node."""
+        return await self.get_property(PROPERTY_ARTICLE, node_id=node_id)
+
+    async def get_country(self, node_id=1) -> str:
+        """Get the configured country of the node."""
+        return await self.get_property(PROPERTY_COUNTRY, node_id=node_id)
+
+    async def get_name(self, node_id=1) -> str:
+        """Get the configured name of the node."""
+        return await self.get_property(PROPERTY_NAME, node_id=node_id)
+
+    async def get_orientation(self) -> Literal["left", "right"]:
+        """Get the orientation of the ventilation unit (left / right)."""
+        return "right" if await self.get_property(PROPERTY_ORIENTATION) == 1 else "left"
+
+    # --- Temperature profile target temperatures (TEMPHUMCONTROL) ---
+
+    _PROFILE_TARGET_PROPERTY = {
+        VentilationTemperatureProfile.WARM: PROPERTY_TARGET_TEMPERATURE_HEATING,
+        VentilationTemperatureProfile.NORMAL: PROPERTY_TARGET_TEMPERATURE_NORMAL,
+        VentilationTemperatureProfile.COOL: PROPERTY_TARGET_TEMPERATURE_COOLING,
+    }
+
+    async def get_target_temperature(self, profile: Literal["warm", "normal", "cool"]) -> float:
+        """Get the target temperature in °C for the given temperature profile (warm / normal / cool)."""
+        prop = self._PROFILE_TARGET_PROPERTY.get(profile)
+        if prop is None:
+            raise ValueError(f"Invalid profile: {profile}")
+        return await self.get_property(prop) / 10
+
+    async def set_target_temperature(self, profile: Literal["warm", "normal", "cool"], temperature: float):
+        """Set the target temperature in °C for the given temperature profile (warm / normal / cool)."""
+        prop = self._PROFILE_TARGET_PROPERTY.get(profile)
+        if prop is None:
+            raise ValueError(f"Invalid profile: {profile}")
+        await self.set_property_typed(prop.unit, prop.subunit, prop.property_id, round(temperature * 10), prop.property_type)
+
+    async def get_rmot_setpoint(self, period: Literal["heating", "cooling"]) -> float:
+        """Get the RMOT setpoint in °C delimiting the heating / cooling period."""
+        if period == "heating":
+            prop = PROPERTY_RMOT_HEATING_PERIOD
+        elif period == "cooling":
+            prop = PROPERTY_RMOT_COOLING_PERIOD
+        else:
+            raise ValueError(f"Invalid period: {period}")
+        return await self.get_property(prop) / 10
+
+    # --- Ventilation configuration (VENTILATIONCONFIG) ---
+
+    async def get_altitude(self) -> int:
+        """Get the configured altitude band (0=0-500, 1=500-1000, 2=1000-1500, 3=1500-2000 m)."""
+        return await self.get_property(PROPERTY_ALTITUDE)
+
+    async def get_ventilation_control_mode(self) -> int:
+        """Get the ventilation control mode (0=flow control, 1=constant flow)."""
+        return await self.get_property(PROPERTY_VENTILATION_CONTROL_MODE)
+
+    async def get_unbalance(self) -> float:
+        """Get the configured supply/exhaust unbalance in % (negative = more exhaust)."""
+        return await self.get_property(PROPERTY_UNBALANCE) / 10
+
+    async def get_node_info(self, node_id=1) -> Dict[str, Any]:
+        """Get a best-effort dict of node information. Properties that fail are omitted."""
+        info: Dict[str, Any] = {}
+        getters = {
+            "serial_number": self.get_serial_number,
+            "firmware_version": self.get_firmware_version,
+            "model": self.get_model,
+            "article_number": self.get_article_number,
+            "country": self.get_country,
+            "name": self.get_name,
+        }
+        for key, getter in getters.items():
+            try:
+                info[key] = await getter(node_id=node_id)
+            except (ComfoConnectError, AioComfoConnectNotConnected, AioComfoConnectTimeout) as exc:
+                _LOGGER.debug("Could not read node property %s: %s", key, exc)
+        return info
 
     async def clear_errors(self):
         """Clear the errors."""
