@@ -38,6 +38,9 @@ from aiocomfoconnect.exceptions import (
 from aiocomfoconnect.properties import (
     PROPERTY_ALTITUDE,
     PROPERTY_ARTICLE,
+    PROPERTY_BATHROOM_SWITCH_ACTIVATION_DELAY,
+    PROPERTY_BATHROOM_SWITCH_DEACTIVATION_DELAY,
+    PROPERTY_BATHROOM_SWITCH_MODE,
     PROPERTY_COUNTRY,
     PROPERTY_FIRMWARE_VERSION,
     PROPERTY_MODEL,
@@ -710,6 +713,41 @@ class ComfoConnect(Bridge):
     async def get_unbalance(self) -> float:
         """Get the configured supply/exhaust unbalance in % (negative = more exhaust)."""
         return await self.get_property(PROPERTY_UNBALANCE) / 10
+
+    async def get_bathroom_switch_boost_duration(self) -> int:
+        """Get the installer-configured bathroom-switch boost duration, in minutes.
+
+        This is the "deactivation delay" (VENTILATIONCONFIG 0x0c): how long boosted
+        ventilation continues after the wall switch is released. It governs the
+        auto-expiry of a bathroom-switch boost (operating mode 8).
+        """
+        return await self.get_property(PROPERTY_BATHROOM_SWITCH_DEACTIVATION_DELAY)
+
+    async def get_bathroom_switch_activation_delay(self) -> int:
+        """Get the installer-configured bathroom-switch activation delay, in seconds.
+
+        The delay (VENTILATIONCONFIG 0x0b) before the boost kicks in after the wall
+        switch is pressed.
+        """
+        return await self.get_property(PROPERTY_BATHROOM_SWITCH_ACTIVATION_DELAY)
+
+    async def get_bathroom_switch_mode(self) -> int:
+        """Get the bathroom-switch mode (VENTILATIONCONFIG 0x0d): 0=fixed, 1=mirrored."""
+        return await self.get_property(PROPERTY_BATHROOM_SWITCH_MODE)
+
+    async def set_bathroom_switch_boost_duration(self, minutes: int):
+        """Set the bathroom-switch boost duration (deactivation delay), in minutes.
+
+        This is an installer/commissioning value on the unit (VENTILATIONCONFIG 0x0c);
+        writes were verified to persist on real hardware.
+        """
+        prop = PROPERTY_BATHROOM_SWITCH_DEACTIVATION_DELAY
+        await self.set_property_typed(prop.unit, prop.subunit, prop.property_id, int(minutes), prop.property_type)
+
+    async def set_bathroom_switch_activation_delay(self, seconds: int):
+        """Set the bathroom-switch activation delay (VENTILATIONCONFIG 0x0b), in seconds."""
+        prop = PROPERTY_BATHROOM_SWITCH_ACTIVATION_DELAY
+        await self.set_property_typed(prop.unit, prop.subunit, prop.property_id, int(seconds), prop.property_type)
 
     async def get_node_info(self, node_id=1) -> Dict[str, Any]:
         """Get a best-effort dict of node information. Properties that fail are omitted."""

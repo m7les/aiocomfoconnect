@@ -77,6 +77,49 @@ async def test_get_unbalance(comfoconnect):
 
 
 @pytest.mark.asyncio
+async def test_get_bathroom_switch_boost_duration(comfoconnect):
+    """Bathroom-switch boost duration is the UINT8 deactivation delay, in minutes."""
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=_resp(bytes([30])))) as mock_rmi:
+        assert await comfoconnect.get_bathroom_switch_boost_duration() == 30
+        sent = bytes(mock_rmi.call_args[0][0])
+        # 0x01 = get, 0x1E = VENTILATIONCONFIG, 0x01 = subunit, 0x10 flag, 0x0C = deactivation delay
+        assert sent == bytes([0x01, 0x1E, 0x01, 0x10, 0x0C])
+
+
+@pytest.mark.asyncio
+async def test_set_bathroom_switch_boost_duration(comfoconnect):
+    """Setting the boost duration writes a UINT8 to VENTILATIONCONFIG 0x0c."""
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=_resp(b""))) as mock_rmi:
+        await comfoconnect.set_bathroom_switch_boost_duration(45)
+        sent = bytes(mock_rmi.call_args[0][0])
+        # 0x03 = set, 0x1E = VENTILATIONCONFIG, 0x01 = subunit, 0x0C = deactivation delay, UINT8 45
+        assert sent == bytes([0x03, 0x1E, 0x01, 0x0C, 45])
+
+
+@pytest.mark.asyncio
+async def test_set_bathroom_switch_activation_delay(comfoconnect):
+    """Setting the activation delay writes a signed INT16 (seconds) to 0x0b."""
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=_resp(b""))) as mock_rmi:
+        await comfoconnect.set_bathroom_switch_activation_delay(300)
+        sent = bytes(mock_rmi.call_args[0][0])
+        assert sent == bytes([0x03, 0x1E, 0x01, 0x0B]) + (300).to_bytes(2, "little", signed=True)
+
+
+@pytest.mark.asyncio
+async def test_get_bathroom_switch_activation_delay(comfoconnect):
+    """Activation delay is a signed INT16 in seconds."""
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=_resp((300).to_bytes(2, "little", signed=True)))):
+        assert await comfoconnect.get_bathroom_switch_activation_delay() == 300
+
+
+@pytest.mark.asyncio
+async def test_get_bathroom_switch_mode(comfoconnect):
+    """Mode is a UINT8 (0=fixed, 1=mirrored)."""
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=_resp(bytes([1])))):
+        assert await comfoconnect.get_bathroom_switch_mode() == 1
+
+
+@pytest.mark.asyncio
 async def test_get_node_info_best_effort(comfoconnect):
     """get_node_info omits properties that fail rather than raising."""
 
