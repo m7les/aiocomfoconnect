@@ -497,6 +497,24 @@ class ComfoConnect(Bridge):
         else:
             await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_01, 0x06]))
 
+    async def get_bathroom_boost(self) -> bool:
+        """Get whether a bathroom-switch (wall button) boost is active.
+
+        This is the BOOSTSWITCH timer entry (SCHEDULE 0x01 / property 0x08), which is
+        separate from the app-boost (0x06) driven by get_boost/set_boost.
+        """
+        result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_01, 0x08]))
+        return result.message[0] == 1
+
+    async def cancel_bathroom_boost(self):
+        """Cancel an active bathroom-switch boost (BOOSTSWITCH, property 0x08).
+
+        The wall button uses a different schedule timer than the app-boost, so
+        set_boost(False) does not clear it. This disables the 0x08 timer entry, the
+        only thing that ends a wall-button boost before its deactivation delay expires.
+        """
+        await self.cmd_rmi_request(bytes([0x85, UNIT_SCHEDULE, SUBUNIT_01, 0x08]))
+
     async def get_away(self):
         """Get away mode."""
         result = await self.cmd_rmi_request(bytes([0x83, UNIT_SCHEDULE, SUBUNIT_01, 0x0B]))

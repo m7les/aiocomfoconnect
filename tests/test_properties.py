@@ -120,6 +120,24 @@ async def test_get_bathroom_switch_mode(comfoconnect):
 
 
 @pytest.mark.asyncio
+async def test_get_bathroom_boost(comfoconnect):
+    """Bathroom boost reads the BOOSTSWITCH timer entry (0x08); first byte = active."""
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=_resp(bytes([1])))) as mock_rmi:
+        assert await comfoconnect.get_bathroom_boost() is True
+        assert bytes(mock_rmi.call_args[0][0]) == bytes([0x83, 0x15, 0x01, 0x08])
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=_resp(bytes([0])))):
+        assert await comfoconnect.get_bathroom_boost() is False
+
+
+@pytest.mark.asyncio
+async def test_cancel_bathroom_boost(comfoconnect):
+    """Cancelling disables the BOOSTSWITCH timer entry (0x85 = DISABLETIMERENTRY)."""
+    with patch.object(comfoconnect, "cmd_rmi_request", AsyncMock(return_value=_resp(b""))) as mock_rmi:
+        await comfoconnect.cancel_bathroom_boost()
+        assert bytes(mock_rmi.call_args[0][0]) == bytes([0x85, 0x15, 0x01, 0x08])
+
+
+@pytest.mark.asyncio
 async def test_get_node_info_best_effort(comfoconnect):
     """get_node_info omits properties that fail rather than raising."""
 
