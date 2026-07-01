@@ -60,5 +60,14 @@ string maps here; keep `value_fn` limited to numeric scaling (e.g. INT16 temps �
 - 86 unknown PDOs → observational RE (stimulus/response on the live stream), not RMI.
 - 47 `??` RMI property rows in `docs/PROTOCOL-RMI.md`.
 - 5 undocumented sensor units: temp `0x21`, humidity `0x22`, pressure `0x23`,
-  analog input `0x25`, CO2 `0x2b` — property layouts unknown; need an ID sweep
-  (many may be absent on any given unit and just error out).
+  analog input `0x25`, CO2 `0x2b`.
+  **RE'd 2026-07-01 (read-only sweep, ComfoAir Q350):** all 5 respond but are
+  **configuration space for optional add-on sensors, not live readings** — the actual
+  measurements stream as PDOs. Each is replicated across subunits (sensor slots) with
+  identical *default* values, so on an unequipped unit there's nothing useful to expose:
+  - `0x21`/`0x22` subunits 1–6, `0x23` subunits 1–2: just enable flags (prop 0x01=1, 0x02=0/1).
+  - `0x25` analog: 4 slots, identical defaults (prop 0x03=100, 0x05=50, 0x06=100, 0x07=300).
+  - `0x2b` CO2: 8 slots; prop 0x01 = slot bitmask (2^(sub−1)); identical defaults
+    (0x02=2000 max ppm, 0x03=400 min ppm, 0x05=1050, 0x06=50, 0x07=300). No sensor fitted.
+  Decision: do NOT build HA entities from these units. Real RE value is in the 86
+  unknown PDOs (Domain A: observational stimulus/response on the live stream).
